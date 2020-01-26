@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<config>
+    <start>com.shorindo.xprofiler.MainTest.main(String[])</start>
+    <includes>
+        <package>com.shorindo.xprofiler</package>
+    </includes>
+</config>
