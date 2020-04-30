@@ -26,8 +26,10 @@ public class MainTest {
     private static MainTest main;
 
     public static void main(String[] args) {
-        System.out.println("main()");
-        start(args);
+//        System.out.println("main()");
+//        start(args);
+        
+        Hello.main(args);
     }
 
     private static int start(String[] args) {
@@ -36,8 +38,24 @@ public class MainTest {
         return main.run();
     }
 
-    private int run() {
-        System.out.println("run()");
+    public int run() {
+        int result = 0;
+        for (int i = 0; i < 10; i++) {
+            result = add(result, i);
+        }
         return 0;
+    }
+
+    public int add(int a, int b) {
+        try {
+            Profiler.profileIn("com.shorindo.xprofiler.MainTest.add(int,int)");
+            return add_instrumented(a, b);
+        } finally {
+            Profiler.profileOut("com.shorindo.xprofiler.MainTest.add(int,int)");
+        }
+    }
+
+    private int add_instrumented(int a, int b) {
+        return a + b;
     }
 }
