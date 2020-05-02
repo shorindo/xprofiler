@@ -30,32 +30,34 @@ public class MainTest {
 //        start(args);
         
         Hello.main(args);
+        Hello.main(args);
+        Hello.main(args);
     }
 
-    private static int start(String[] args) {
-        System.out.println("start()");
-        main = new MainTest();
-        return main.run();
-    }
+//    private static int start(String[] args) {
+//        System.out.println("start()");
+//        main = new MainTest();
+//        return main.run();
+//    }
 
-    public int run() {
-        int result = 0;
-        for (int i = 0; i < 10; i++) {
-            result = add(result, i);
-        }
-        return 0;
-    }
+//    public int run() {
+//        int result = 0;
+//        for (int i = 0; i < 10; i++) {
+//            result = add(result, i);
+//        }
+//        return 0;
+//    }
 
-    public int add(int a, int b) {
-        try {
-            Profiler.profileIn("com.shorindo.xprofiler.MainTest.add(int,int)");
-            return add_instrumented(a, b);
-        } finally {
-            Profiler.profileOut("com.shorindo.xprofiler.MainTest.add(int,int)");
-        }
-    }
+//    public int add(int a, int b) {
+//        try {
+//            Profiler.profileIn("com.shorindo.xprofiler.MainTest.add(int,int)");
+//            return add_instrumented(a, b);
+//        } finally {
+//            Profiler.profileOut("com.shorindo.xprofiler.MainTest.add(int,int)");
+//        }
+//    }
 
-    private int add_instrumented(int a, int b) {
-        return a + b;
-    }
+//    private int add_instrumented(int a, int b) {
+//        return a + b;
+//    }
 }

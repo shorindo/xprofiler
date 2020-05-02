@@ -17,10 +17,10 @@ package com.shorindo.xprofiler;
 
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Stack;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -30,32 +30,27 @@ import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
 
 import javassist.CannotCompileException;
+import javassist.ClassClassPath;
 import javassist.ClassPool;
+import javassist.CodeConverter;
 import javassist.CtClass;
 import javassist.CtMethod;
+import javassist.CtNewMethod;
 import javassist.NotFoundException;
+import javassist.bytecode.AnnotationsAttribute;
+import javassist.bytecode.AttributeInfo;
+import javassist.bytecode.CodeAttribute;
+import javassist.bytecode.ConstPool;
+import javassist.bytecode.annotation.Annotation;
+import javassist.bytecode.annotation.StringMemberValue;
 import javassist.expr.ExprEditor;
 import javassist.expr.MethodCall;
+import javassist.expr.NewExpr;
 
 import javax.xml.bind.JAXB;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlElementWrapper;
 import javax.xml.bind.annotation.XmlRootElement;
-
-import org.apache.bcel.Const;
-import org.apache.bcel.classfile.ClassFormatException;
-import org.apache.bcel.classfile.ClassParser;
-import org.apache.bcel.classfile.JavaClass;
-import org.apache.bcel.classfile.Method;
-import org.apache.bcel.generic.ClassGen;
-import org.apache.bcel.generic.ConstantPoolGen;
-import org.apache.bcel.generic.InstructionConst;
-import org.apache.bcel.generic.InstructionFactory;
-import org.apache.bcel.generic.InstructionList;
-import org.apache.bcel.generic.MethodGen;
-import org.apache.bcel.generic.ObjectType;
-import org.apache.bcel.generic.PUSH;
-import org.apache.bcel.generic.Type;
 
 /**
  * 
@@ -68,130 +63,220 @@ public class Profiler {
      *   <config file>
      */
     public static void premain(String agentArgs, Instrumentation instrumentation) {
-// USE bcel
+        System.out.println("premain:" + Profiler.class.getName());
 //        try (InputStream is = Profile.class.getClassLoader().getResourceAsStream(agentArgs)) {
 //            config = JAXB.unmarshal(is, Config.class);
 //        } catch (IOException e1) {
 //            throw new RuntimeException(e1);
 //        }
-//
+        
 //        instrumentation.addTransformer(new ClassFileTransformer() {
-//            public byte[] transform(ClassLoader loader,
-//                                    String className,
-//                                    Class<?> classBeingRedefined,
-//                                    ProtectionDomain protectionDomain,
-//                                    byte[] classfileBuffer) {
-//                if (!config.contains(className)) {
-//                    return null;
-//                }
-//                ClassParser cp = new ClassParser(new ByteArrayInputStream(classfileBuffer), className);
+//            public byte[] transform(ClassLoader loader, String className,
+//                    Class<?> classBeingRedefined, ProtectionDomain protectionDomain,
+//                    byte[] classfileBuffer) throws IllegalClassFormatException {
+//                ClassPool clPool = ClassPool.getDefault();
+//                String cName = className.replaceAll("/", ".");
+//                //if (!isTarget(cName)) return null;
+//
 //                try {
-//                    JavaClass javaClass = cp.parse();
-//                    ClassGen cgen = new ClassGen(javaClass);
-//                    for (Method method : javaClass.getMethods()) {
-//                        System.out.println(method.getName());
-//                        if (!"<init>".equals(method.getName())) {
-//                            try {
-//                                instrument$update(cgen, method);
-//                                //instrument(cgen, method);
-//                                //addWrapper(cgen, method);
-//                            } catch (Throwable th) {
-//                                th.printStackTrace();
-//                            }
+//                    CtClass ctClass = clPool.get(cName);
+//                    for(CtMethod method : ctClass.getMethods()) {
+//                        if (!isTarget(ctClass.getName())) continue;
+////                        System.err.println(ctClass.getName() + ":" + method.getName());
+//                        try {
+//                            method.instrument(new ExprEditor() {
+//                                @Override
+//                                public void edit(MethodCall m) throws CannotCompileException {
+//                                    try {
+//                                        //System.err.println(ctClass.getName() + ":" + m.getMethodName() + "->" + m.getMethod().getDeclaringClass().getName());
+//                                        //if (ctClass != m.getMethod().getDeclaringClass()) return;
+//                                        //if (!isTarget(m.getMethod().getDeclaringClass().getName())) return;
+//                                        m.replace("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + m.getMethod().getLongName() + "\");"
+//                                                + "try {"
+//                                                + "    $_ = $proceed($$);"
+//                                                + "} finally {"
+//                                                + "    com.shorindo.xprofiler.Profiler.profileOut(profile);"
+//                                                + "}");
+//                                    } catch (NotFoundException e) {
+//                                        e.printStackTrace();
+//                                    }
+//                                }
+//                                @Override
+//                                public void edit(NewExpr expr) {
+//                                    System.err.println(expr.getClassName() + ":" + expr.getSignature());
+//                                }
+//                            });
+//                        } catch (CannotCompileException ex) {
+//                            ex.printStackTrace();
 //                        }
 //                    }
-//                    return cgen.getJavaClass().getBytes();
-//                } catch (ClassFormatException e) {
+//                    classfileBuffer = ctClass.toBytecode();
+//                } catch (NotFoundException e) {
 //                    e.printStackTrace();
 //                } catch (IOException e) {
 //                    e.printStackTrace();
+//                } catch (CannotCompileException e) {
+//                    e.printStackTrace();
 //                }
-//                return null;
+//
+//                return classfileBuffer;
+//            }
+//            
+//            private boolean isTarget(String className) {
+//                //System.err.println(className);
+//                if (className.equals("com.shorindo.xprofiler.Profiler")) {
+//                    return false;
+//                } else if (className.startsWith("com.shorindo.xprofiler.")) {
+//                    return true;
+//                } else {
+//                    return false;
+//                }
+//                
 //            }
 //        });
 
-// USE javassist
-//        try {
-//            ClassPool cp = ClassPool.getDefault();
-//            CtClass cc = cp.get("com.shorindo.xprofiler.Hello");
-//            CtMethod m = cc.getDeclaredMethod("main");
-//            m.instrument(new ExprEditor() {
-//                public void edit(MethodCall m) throws CannotCompileException {
-//System.out.println(m.getClassName() + "." + m.getMethodName());
-//                    if (m.getClassName().equals("com.shorindo.xprofiler.Hello")
-//                            && m.getMethodName().equals("say")) {
-//System.out.println("replacing say()...");
-//                        m.replace("$0.hi();");
-//                    }
-//                }
-//            });
-//            cc.writeFile();
-//            
-//            Class thisClass = cc.getClass();
-//            ClassLoader loader = thisClass.getClassLoader();
-//            ProtectionDomain domain = thisClass.getProtectionDomain();
-//            cc.toClass(loader, domain);
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//        }
-        
         instrumentation.addTransformer(new ClassFileTransformer() {
             public byte[] transform(ClassLoader loader, String className,
                     Class<?> classBeingRedefined, ProtectionDomain protectionDomain,
                     byte[] classfileBuffer) throws IllegalClassFormatException {
-                ClassPool clPool = ClassPool.getDefault();
                 String cName = className.replaceAll("/", ".");
-                if (!isTarget(cName)) return null;
-                System.out.println("clPool =======> " + cName);
+                if (!isTarget(cName)) {
+                    return classfileBuffer;
+                }
+                System.out.println("addTransformer(" + cName + ")");
+                ClassPool clPool = ClassPool.getDefault();
+                ClassClassPath classPath = new ClassClassPath(this.getClass());
+                clPool.insertClassPath(classPath);
+                InputStream is = new ByteArrayInputStream(classfileBuffer);
                 try {
-                    CtClass ctClass = clPool.get(cName);
-                    System.out.println("ct class: " + ctClass + ": methods = " + Arrays.deepToString(ctClass.getMethods()));
-                    for(CtMethod method : ctClass.getMethods()) {
-                        try {
-                            if (ctClass != method.getDeclaringClass()) continue;
-                            //CtMethod newMethod = new CtMethod(method.getMethodInfo(), ctClass);
-                            //ctClass.addMethod(newMethod);
-                            //method.setName("_" + method.getName());
-                            //method.insertBefore("System.out.println(\"start - " + method.getLongName() + "\");");
-                            //method.insertAfter("System.out.println(\"finish - " + method.getLongName() + "\");");
+                    CtClass cc = clPool.makeClass(is);
+                    if (cc.isEnum()) return null;
+                    if (cc.isInterface()) return null;
 
-                            method.instrument(new ExprEditor() {
-                                @Override
-                                public void edit(MethodCall m) throws CannotCompileException {
-                                    m.replace("System.out.println(\"start - " + m.getMethodName() + "\");"
-                                            + "try {"
-                                            + "    $_ = $proceed($$);"
-                                            + "} finally {"
-                                            + "    System.out.println(\"finish - " + m.getMethodName() + "\");"
-                                            + "}");
-                                    try {
-                                        method.getReturnType();
-                                        method.getParameterTypes();
-                                    } catch (NotFoundException e) {
-                                        e.printStackTrace();
-                                    }
-                                }
-                            });
-                        } catch (CannotCompileException ex) {
-                            ex.printStackTrace();
+                    // insertBeforeを使う
+                    // try {} finally {} するには？
+//                    for (CtMethod method : cc.getDeclaredMethods()) {
+//                        if (cc != method.getDeclaringClass()) continue;
+//
+//                        System.out.println("  --> " + method.getName());
+//                        if (!method.isEmpty()) {
+//                            method.insertBefore("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + method.getLongName() + "\");");
+//                            method.insertAfter("com.shorindo.xprofiler.Profiler.profileOut(profile);");
+//                        } else {
+//                            method.insertAfter("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + method.getLongName() + "\");");
+//                            method.insertAfter("com.shorindo.xprofiler.Profiler.profileOut(profile);");
+//                        }
+//                        //method.insertAfter("} finally { com.shorindo.xprofiler.Profiler.profileOut(profile); }");
+//                    }
+
+//                    for (CtMethod method : cc.getDeclaredMethods()) {
+//                        if (cc != method.getDeclaringClass()) continue;
+//
+//                        method.instrument(new ExprEditor() {
+//                            @Override
+//                            public void edit(MethodCall m) throws CannotCompileException {
+//                                System.out.println(" --> " + m.getMethodName());
+//                            }
+//                        });
+//                    }
+
+                    // メソッドをrenameして新しいメソッドから呼び出す
+                    // →アノテーションがうまくハンドリングできない
+                    // https://www.ibm.com/developerworks/jp/java/library/j-dyn0916/
+                    for (CtMethod method : cc.getDeclaredMethods()) {
+                        if (cc != method.getDeclaringClass()) continue;
+
+                        System.out.println("  --> " + method.getName());
+
+                        String mname = method.getName();
+                        String nname = "_" + mname;
+                        CtMethod mnew = CtNewMethod.copy(method, nname, method.getDeclaringClass(), null);
+                        cc.addMethod(mnew);
+                        StringBuffer body = new StringBuffer();
+                        body.append("{");
+                        body.append("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + method.getLongName() + "\");");
+                        body.append("try {");
+                        try {
+                            String type = method.getReturnType().getName();
+                            if (!"void".equals(type)) {
+                                body.append("return ");
+                            }
+                        } catch (NotFoundException e) {
+                            e.printStackTrace();
                         }
+                        body.append(nname + "($$);\n");
+                        body.append("} finally {");
+                        body.append("    com.shorindo.xprofiler.Profiler.profileOut(profile);");
+                        body.append("}}");
+                        method.setBody(body.toString());
+
+                        // アノテーションを入れ替える
+//                        try {
+//                            List<Object> attrs = new ArrayList<>();
+//                            for (Object obj : method.getMethodInfo().getAttributes()) {
+//                                //System.out.println("  attr --> " + obj + ":" + obj.getClass());
+//                                if (obj instanceof AnnotationsAttribute) {
+////                                    for (Annotation annot : ((AnnotationsAttribute)obj).getAnnotations()) {
+////                                        System.out.println("  annot --> " + annot.getTypeName() + " to " + method.getName());
+////                                    }
+//                                    mnew.getMethodInfo().addAttribute((AnnotationsAttribute)obj);
+//                                } else {
+//                                    attrs.add(obj);
+//                                }
+//                            }
+//                            method.getMethodInfo().removeCodeAttribute();
+//                            for (Object cattr : method.getMethodInfo().getAttributes()) {
+//                                System.out.println("    " + cattr);
+//                            }
+//                            for (Object attr : attrs) {
+//                                method.getMethodInfo().addAttribute((AttributeInfo)attr);
+//                            }
+//                        } catch (Exception e) {
+//                            e.printStackTrace();
+//                        }
+
                     }
-                    classfileBuffer = ctClass.toBytecode();
-                } catch (NotFoundException e) {
-                    e.printStackTrace();
-                } catch (IOException e) {
+
+                    // ExprEditorでは呼び出されるメソッド本体ではなく、呼び出し側の呼び出し方が変更される？
+//                    cc.instrument(new ExprEditor() {
+//                        @Override
+//                        public void edit(MethodCall m) throws CannotCompileException {
+//                            try {
+//                                System.err.println(cc.getName() + ":" + m.getMethodName() + "->" + m.getClassName());
+//                                if (cc != m.getMethod().getDeclaringClass()) return;
+//                                //if (!isTarget(m.getMethod().getDeclaringClass().getName())) return;
+//                                m.replace("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + m.getMethod().getLongName() + "\");"
+//                                        + "try {"
+//                                        + "    $_ = $proceed($$);"
+//                                        + "} finally {"
+//                                        + "    com.shorindo.xprofiler.Profiler.profileOut(profile);"
+//                                        + "}");
+//                            } catch (NotFoundException e) {
+//                                e.printStackTrace();
+//                            }
+//                        }
+//                    });
+                    System.out.println(toSource(cc));
+                    return cc.toBytecode();
+                } catch (IOException | RuntimeException e) {
                     e.printStackTrace();
                 } catch (CannotCompileException e) {
                     e.printStackTrace();
+                } finally {
+                    try {
+                        is.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 }
-
-                return classfileBuffer;
+                return null;
             }
             
             private boolean isTarget(String className) {
-                if (className.startsWith("com.shorindo.xprofiler.Profiler")) {
+                //System.err.println(className);
+                if (className.equals("com.shorindo.xprofiler.Profiler")) {
                     return false;
-                } else if (className.startsWith("com.shorindo.xprofiler.")) {
+                } else if (className.startsWith("com.shorindo.")) {
                     return true;
                 } else {
                     return false;
@@ -200,234 +285,24 @@ public class Profiler {
             }
         });
         
-//        instrumentation.addTransformer(new ClassFileTransformer() {
-//
-//            @Override
-//            public byte[] transform(ClassLoader loader, String className,
-//                    Class<?> classBeingRedefined,
-//                    ProtectionDomain protectionDomain, byte[] classfileBuffer)
-//                    throws IllegalClassFormatException {
-//                try {
-//                    ClassPool cp = ClassPool.getDefault();
-//                    CtClass cc = cp.get("com.shorindo.xprofiler.Hello");
-//                    CtMethod m = cc.getDeclaredMethod("main");
-//                    m.instrument(new ExprEditor() {
-//                        public void edit(MethodCall m) throws CannotCompileException {
-//                            if (m.getClassName().equals("Hello")
-//                                    && m.getMethodName().equals("say"))
-//                                m.replace("$0.hi();");
-//                        }
-//                    });
-//                    cc.writeFile();
-//                    cc.toClass(loader, protectionDomain);
-//                } catch (Exception e) {
-//                    e.printStackTrace();
-//                }
-//                return null;
-//            }
-//            
-//        });
-    }
-
-    private static void instrument$update(ClassGen cgen, Method method) {
-        MethodGen methgen = new MethodGen(method, cgen.getClassName(), cgen.getConstantPool());
-        cgen.removeMethod(method);
-        InstructionFactory ifact = new InstructionFactory(cgen);
-        InstructionList ilist = methgen.getInstructionList();
-        ConstantPoolGen pgen = cgen.getConstantPool();
-//        ilist.append(ifact.createFieldAccess("java.lang.System", "out",
-//                new ObjectType("java.io.PrintStream"),
-//                Const.GETSTATIC));
-//        ilist.append(InstructionConst.DUP);
-//        ilist.append(InstructionConst.DUP);
-//        ilist.append(new PUSH(pgen, "in:" + methgen.getName()));
-//        ilist.append(InstructionFactory.createLoad(Type.STRING, 0));
-//        ilist.append(ifact.createInvoke("java.io.PrintStream", "print",
-//                Type.VOID, new Type[] { Type.STRING },
-//                Const.INVOKESTATIC));
-//        ilist.insert(new PUSH(pgen, "in:" + methgen.getName()));
-//        ilist.insert(ifact.createInvoke("com.shorindo.Profiler", "profileIn",
-//                Type.VOID, new Type[] { Type.STRING },
-//                Const.INVOKEVIRTUAL));
-        methgen.stripAttributes(true);
-        methgen.setMaxStack();
-        methgen.setMaxLocals();
-        cgen.addMethod(methgen.getMethod());
-    }
-
-    private static void instrument(ClassGen cgen, Method method) {
-        printCode(method);
-
-        // rename a copy of the original method
-        MethodGen methgen = new MethodGen(method, cgen.getClassName(), cgen.getConstantPool());
-        cgen.removeMethod(method);
-        String iname = methgen.getName() + "$instrumented";
-        methgen.setName(iname);
-        cgen.addMethod(methgen.getMethod());
-        Type returnType = methgen.getReturnType();
-         
-        InstructionFactory ifact = new InstructionFactory(cgen);
-        InstructionList ilist = new InstructionList();
-        ConstantPoolGen pgen = cgen.getConstantPool();
-        String cname = cgen.getClassName();
-        MethodGen wrapgen = new MethodGen(method, cname, pgen);
-        wrapgen.setInstructionList(ilist);
-         
-        // compute the size of the calling parameters
-        Type[] types = methgen.getArgumentTypes();
-        int slot = methgen.isStatic() ? 0 : 1;
-        for (int i = 0; i < types.length; i++) {
-            slot += types[i].getSize();
-        }
-
-        // call the wrapped method
-        int offset = 0;
-        short invoke = Const.INVOKESTATIC;
-        if (!methgen.isStatic()) {
-            ilist.append(InstructionFactory.createLoad(Type.OBJECT, 0));
-            offset = 1;
-            invoke = Const.INVOKEVIRTUAL;
-        }
-        for (int i = 0; i < types.length; i++) {
-            Type type = types[i];
-            ilist.append(InstructionFactory.createLoad(type, offset));
-            offset += type.getSize();
-        }
-        ilist.append(ifact.createInvoke(cname, iname, returnType, types, invoke));
-         
-        // store result for return later
-        if (returnType != Type.VOID) {
-            ilist.append(InstructionFactory.createStore(returnType, slot+2));
-        }
-
-        // return result from wrapped method call
-        if (returnType != Type.VOID) {
-            ilist.append(InstructionFactory.createLoad(returnType, slot+2));
-        }
-        ilist.append(InstructionFactory.createReturn(returnType));
-
-        // finalize the constructed method
-        wrapgen.stripAttributes(true);
-        wrapgen.setMaxStack();
-        wrapgen.setMaxLocals();
-        cgen.addMethod(wrapgen.getMethod());
-        printCode(wrapgen.getMethod());
-        ilist.dispose();
-    }
-
-    /*
-     * https://www.ibm.com/developerworks/java/library/j-dyn0414/
-     */
-    private static void addWrapper(ClassGen cgen, Method method) {
-
-        // set up the construction tools
-        InstructionFactory ifact = new InstructionFactory(cgen);
-        InstructionList ilist = new InstructionList();
-        ConstantPoolGen pgen = cgen.getConstantPool();
-        String cname = cgen.getClassName();
-        MethodGen wrapgen = new MethodGen(method, cname, pgen);
-        wrapgen.setInstructionList(ilist);
-         
-        // rename a copy of the original method
-        MethodGen methgen = new MethodGen(method, cname, pgen);
-        cgen.removeMethod(method);
-        String iname = methgen.getName() + "$instrumented";
-        methgen.setName(iname);
-        cgen.addMethod(methgen.getMethod());
-        Type result = methgen.getReturnType();
-         
-        // compute the size of the calling parameters
-        Type[] types = methgen.getArgumentTypes();
-        int slot = methgen.isStatic() ? 0 : 1;
-        for (int i = 0; i < types.length; i++) {
-            slot += types[i].getSize();
-        }
-         
-        // save time prior to invocation
-        ilist.append(ifact.createInvoke("java.lang.System", "nanoTime",
-                Type.LONG, Type.NO_ARGS, 
-                Const.INVOKESTATIC));
-        ilist.append(InstructionFactory.
-                createStore(Type.LONG, slot));
-         
-        // call the wrapped method
-        int offset = 0;
-        short invoke = Const.INVOKESTATIC;
-        if (!methgen.isStatic()) {
-            ilist.append(InstructionFactory.
-                    createLoad(Type.OBJECT, 0));
-            offset = 1;
-            invoke = Const.INVOKEVIRTUAL;
-        }
-        for (int i = 0; i < types.length; i++) {
-            Type type = types[i];
-            ilist.append(InstructionFactory.
-                    createLoad(type, offset));
-            offset += type.getSize();
-        }
-        ilist.append(ifact.createInvoke(cname, 
-                iname, result, types, invoke));
-         
-        // store result for return later
-        if (result != Type.VOID) {
-            ilist.append(InstructionFactory.
-                createStore(result, slot+2));
-        }
-        // print time required for method call
-        ilist.append(ifact.createFieldAccess("java.lang.System", "out",
-                new ObjectType("java.io.PrintStream"),
-                Const.GETSTATIC));
-        ilist.append(InstructionConst.DUP);
-        ilist.append(InstructionConst.DUP);
-
-        String text = "Call to method " + wrapgen.getName() +
-                " took ";
-        ilist.append(new PUSH(pgen, text));
-        ilist.append(ifact.createInvoke("java.io.PrintStream", "print",
-                Type.VOID, new Type[] { Type.STRING },
-                Const.INVOKEVIRTUAL));
-
-        ilist.append(ifact.createInvoke("java.lang.System", "nanoTime",
-                Type.LONG, Type.NO_ARGS, 
-                Const.INVOKESTATIC));
-        ilist.append(InstructionFactory.
-                createLoad(Type.LONG, slot));
-        ilist.append(InstructionConst.LSUB);
-        ilist.append(ifact.createInvoke("java.io.PrintStream", "print",
-                Type.VOID, new Type[] { Type.LONG },
-                Const.INVOKEVIRTUAL));
-
-        ilist.append(new PUSH(pgen, " ns."));
-        ilist.append(ifact.createInvoke("java.io.PrintStream", "println",
-                Type.VOID, new Type[] { Type.STRING },
-                Const.INVOKEVIRTUAL));
-             
-        // return result from wrapped method call
-        if (result != Type.VOID) {
-            ilist.append(InstructionFactory.
-                createLoad(result, slot+2));
-        }
-        ilist.append(InstructionFactory.createReturn(result));
-         
-        // finalize the constructed method
-        wrapgen.stripAttributes(true);
-        wrapgen.setMaxStack();
-        wrapgen.setMaxLocals();
-        cgen.addMethod(wrapgen.getMethod());
-        printCode(wrapgen.getMethod());
-        ilist.dispose();
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            @Override
+            public void run() {
+                printTree();
+            }
+        });
     }
 
     private static Map<Thread, Stack<Profile>> stackMap = new HashMap<>();
     private static Map<Thread, List<Profile>> profileMap = new HashMap<>();
 
-    public static void profileIn(String name) {
-        Profile profile = new Profile(name);
+    public static Profile profileIn(String name) {
         Stack<Profile> stack = stackMap.get(Thread.currentThread());
         if (stack == null) {
             stack = new Stack<Profile>();
             stackMap.put(Thread.currentThread(), stack);
         }
+        Profile profile = new Profile(name, stack.size());
         stack.push(profile);
 
         List<Profile> profileList = profileMap.get(Thread.currentThread());
@@ -436,35 +311,57 @@ public class Profiler {
             profileMap.put(Thread.currentThread(), profileList);
         }
         profileList.add(profile);
-        System.out.println("in:" + profile.toString());
+        //System.out.println("in:" + name);
+        return profile;
     }
     
-    public static void profileOut(String name) {
-        Profile profile = new Profile(name);
-        System.out.println("out:" + profile.toString());
+    public static void profileOut(Profile profile) {
+        //System.out.println("out:" + profile.getName());
+        Stack<Profile> stack = stackMap.get(Thread.currentThread());
+        if (profile == stack.peek()) {
+            stack.pop();
+            profile.setNanoTime(System.nanoTime() - profile.getNanoTime());
+        }
     }
 
-    public static void printCode(Method method) {
-        System.out.println(method.getName() + "{");
-        for (String line : method.getCode().toString().split("\n")) {
-            System.out.println("\t" + line);
+    public static void printTree() {
+        for (Entry<Thread,List<Profile>> entry : profileMap.entrySet()) {
+            System.out.println("[" + entry.getKey().getName() + "]");
+            for (Profile p : entry.getValue()) {
+                System.out.println(indent(p.getLevel()) + p.getName() + ":" + ((double)p.getNanoTime() / 1000000.0) + " msec");
+            }
         }
-        System.out.println("}");
+    }
+
+    private static String indent(int level) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < level; i++) {
+            sb.append("  ");
+        }
+        return sb.toString();
     }
 
     public static class Profile {
         private String name;
+        private int level;
         private long nanoTime;
 
-        public Profile(String name) {
+        public Profile(String name, int level) {
             this.name = name;
+            this.level = level;
             this.nanoTime = System.nanoTime();
         }
         public String getName() {
             return name;
         }
+        public int getLevel() {
+            return level;
+        }
         public long getNanoTime() {
             return nanoTime;
+        }
+        public void setNanoTime(long nanoTime) {
+            this.nanoTime = nanoTime;
         }
         public String toString() {
             return name + ":" + nanoTime;
@@ -501,4 +398,23 @@ public class Profiler {
         }
     }
 
+    public static String toSource(CtClass cc) {
+        StringBuilder sb = new StringBuilder();
+        try {
+            for (Object annot : cc.getAnnotations()) {
+                sb.append(annot.toString() + "\n");
+            }
+            sb.append("class " + cc.getName() + " {\n");
+            for (CtMethod method : cc.getMethods()) {
+                for (Object mannot : method.getAnnotations()) {
+                    sb.append("    " + mannot + "\n");
+                }
+                sb.append("    " + method.getName() + "();\n");
+            }
+            sb.append("}");
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        return sb.toString();
+    }
 }
