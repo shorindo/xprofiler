@@ -15,22 +15,19 @@
  */
 package com.shorindo.xprofiler;
 
+import static org.junit.Assert.*;
+
+import org.junit.Test;
+
 /**
  * 
  */
-public class Hello extends Greeting {
-    @Deprecated
-    public void say() {
-        System.out.println("Hello");
-        hi();
-    }
-    protected void hi() {
-        System.out.println("Hi, " + createWorld().getName());
-        bye();
-    }
-    public static void main(String[] args) {
-        System.out.println("start...");
-        new Hello().say();
+public class SettingsTest {
+
+    @Test
+    public void testLoad() {
+        Settings settings = Settings.load("src/test/resources/settings.js");
+        System.out.println(settings);
     }
 
- }
+}

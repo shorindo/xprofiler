@@ -23,6 +23,10 @@ public class Greeting {
         System.out.println("Bye!");
     }
     
+    public World createWorld() {
+        return new World();
+    }
+    
     public static class World {
         public String getName() {
             return "Japan";

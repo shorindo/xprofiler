@@ -57,9 +57,14 @@
   		<scope>test</scope>
   	</dependency>
   	<dependency>
-  		<groupId>javassist</groupId>
+  		<groupId>org.javassist</groupId>
   		<artifactId>javassist</artifactId>
-  		<version>3.12.1.GA</version>
+  		<version>3.27.0-GA</version>
+  	</dependency>
+  	<dependency>
+  		<groupId>org.mozilla</groupId>
+  		<artifactId>rhino</artifactId>
+  		<version>1.7R5</version>
   	</dependency>
   </dependencies>
 </project>

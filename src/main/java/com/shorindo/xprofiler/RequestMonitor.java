@@ -15,22 +15,23 @@
  */
 package com.shorindo.xprofiler;
 
+import java.util.concurrent.atomic.AtomicLong;
+
 /**
  * 
  */
-public class Hello extends Greeting {
-    @Deprecated
-    public void say() {
-        System.out.println("Hello");
-        hi();
-    }
-    protected void hi() {
-        System.out.println("Hi, " + createWorld().getName());
-        bye();
-    }
-    public static void main(String[] args) {
-        System.out.println("start...");
-        new Hello().say();
+public class RequestMonitor implements RequestMonitorMBean {
+
+    // リクエスト数を保持するカウンタ
+    private final AtomicLong requestCount = new AtomicLong();
+
+    @Override
+    public long getRequestCount() {
+        return requestCount.get();
     }
 
- }
+    // リクエスト数をインクリメントする
+    public void incrementRequestCount() {
+        requestCount.incrementAndGet();
+    }
+}

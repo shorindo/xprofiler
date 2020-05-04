@@ -22,245 +22,126 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Stack;
+import java.util.regex.Pattern;
 import java.io.ByteArrayInputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
+import java.lang.management.ManagementFactory;
 
 import javassist.CannotCompileException;
 import javassist.ClassClassPath;
+import javassist.ClassPath;
 import javassist.ClassPool;
-import javassist.CodeConverter;
 import javassist.CtClass;
 import javassist.CtMethod;
 import javassist.CtNewMethod;
+import javassist.LoaderClassPath;
 import javassist.NotFoundException;
-import javassist.bytecode.AnnotationsAttribute;
-import javassist.bytecode.AttributeInfo;
-import javassist.bytecode.CodeAttribute;
-import javassist.bytecode.ConstPool;
-import javassist.bytecode.annotation.Annotation;
-import javassist.bytecode.annotation.StringMemberValue;
-import javassist.expr.ExprEditor;
-import javassist.expr.MethodCall;
-import javassist.expr.NewExpr;
 
-import javax.xml.bind.JAXB;
+import javax.management.InstanceAlreadyExistsException;
+import javax.management.MBeanRegistrationException;
+import javax.management.MBeanServer;
+import javax.management.MalformedObjectNameException;
+import javax.management.NotCompliantMBeanException;
+import javax.management.ObjectName;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlElementWrapper;
 import javax.xml.bind.annotation.XmlRootElement;
+
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.NativeArray;
+import org.mozilla.javascript.NativeJSON;
+import org.mozilla.javascript.NativeObject;
+import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.ScriptableObject;
 
 /**
  * 
  */
 public class Profiler {
     private static Config config;
+    private static LoaderClassPath classPath;
+    private static Settings settings = new Settings();
 
     /**
      * Options:
      *   <config file>
      */
     public static void premain(String agentArgs, Instrumentation instrumentation) {
+        setupMonitor();
+        CtClass.main(null);
         System.out.println("premain:" + Profiler.class.getName());
-//        try (InputStream is = Profile.class.getClassLoader().getResourceAsStream(agentArgs)) {
-//            config = JAXB.unmarshal(is, Config.class);
-//        } catch (IOException e1) {
-//            throw new RuntimeException(e1);
-//        }
         
-//        instrumentation.addTransformer(new ClassFileTransformer() {
-//            public byte[] transform(ClassLoader loader, String className,
-//                    Class<?> classBeingRedefined, ProtectionDomain protectionDomain,
-//                    byte[] classfileBuffer) throws IllegalClassFormatException {
-//                ClassPool clPool = ClassPool.getDefault();
-//                String cName = className.replaceAll("/", ".");
-//                //if (!isTarget(cName)) return null;
-//
-//                try {
-//                    CtClass ctClass = clPool.get(cName);
-//                    for(CtMethod method : ctClass.getMethods()) {
-//                        if (!isTarget(ctClass.getName())) continue;
-////                        System.err.println(ctClass.getName() + ":" + method.getName());
-//                        try {
-//                            method.instrument(new ExprEditor() {
-//                                @Override
-//                                public void edit(MethodCall m) throws CannotCompileException {
-//                                    try {
-//                                        //System.err.println(ctClass.getName() + ":" + m.getMethodName() + "->" + m.getMethod().getDeclaringClass().getName());
-//                                        //if (ctClass != m.getMethod().getDeclaringClass()) return;
-//                                        //if (!isTarget(m.getMethod().getDeclaringClass().getName())) return;
-//                                        m.replace("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + m.getMethod().getLongName() + "\");"
-//                                                + "try {"
-//                                                + "    $_ = $proceed($$);"
-//                                                + "} finally {"
-//                                                + "    com.shorindo.xprofiler.Profiler.profileOut(profile);"
-//                                                + "}");
-//                                    } catch (NotFoundException e) {
-//                                        e.printStackTrace();
-//                                    }
-//                                }
-//                                @Override
-//                                public void edit(NewExpr expr) {
-//                                    System.err.println(expr.getClassName() + ":" + expr.getSignature());
-//                                }
-//                            });
-//                        } catch (CannotCompileException ex) {
-//                            ex.printStackTrace();
-//                        }
-//                    }
-//                    classfileBuffer = ctClass.toBytecode();
-//                } catch (NotFoundException e) {
-//                    e.printStackTrace();
-//                } catch (IOException e) {
-//                    e.printStackTrace();
-//                } catch (CannotCompileException e) {
-//                    e.printStackTrace();
-//                }
-//
-//                return classfileBuffer;
-//            }
-//            
-//            private boolean isTarget(String className) {
-//                //System.err.println(className);
-//                if (className.equals("com.shorindo.xprofiler.Profiler")) {
-//                    return false;
-//                } else if (className.startsWith("com.shorindo.xprofiler.")) {
-//                    return true;
-//                } else {
-//                    return false;
-//                }
-//                
-//            }
-//        });
+        try (InputStream is = new FileInputStream(agentArgs)) {
+            Context ctx = Context.enter();
+            ScriptableObject scope = ctx.initStandardObjects();
+            scope.put("settings", scope, settings);
+            Reader reader = new InputStreamReader(is, "UTF-8");
+            ctx.evaluateReader(scope, reader, agentArgs, 1, null);
+            settings = Settings.load(agentArgs);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        ClassPool clPool = ClassPool.getDefault();
 
         instrumentation.addTransformer(new ClassFileTransformer() {
             public byte[] transform(ClassLoader loader, String className,
                     Class<?> classBeingRedefined, ProtectionDomain protectionDomain,
                     byte[] classfileBuffer) throws IllegalClassFormatException {
+
                 String cName = className.replaceAll("/", ".");
                 if (!isTarget(cName)) {
-                    return classfileBuffer;
+                    return null;
                 }
-                System.out.println("addTransformer(" + cName + ")");
-                ClassPool clPool = ClassPool.getDefault();
-                ClassClassPath classPath = new ClassClassPath(this.getClass());
-                clPool.insertClassPath(classPath);
+
                 InputStream is = new ByteArrayInputStream(classfileBuffer);
                 try {
+                    // Tomcatのコンテキスクラスパスを追加する
+                    if (classPath == null) {
+                        classPath = new LoaderClassPath(Thread.currentThread().getContextClassLoader());
+                        clPool.appendClassPath(classPath);
+                    }
+
                     CtClass cc = clPool.makeClass(is);
                     if (cc.isEnum()) return null;
                     if (cc.isInterface()) return null;
 
-                    // insertBeforeを使う
-                    // try {} finally {} するには？
-//                    for (CtMethod method : cc.getDeclaredMethods()) {
-//                        if (cc != method.getDeclaringClass()) continue;
-//
-//                        System.out.println("  --> " + method.getName());
-//                        if (!method.isEmpty()) {
-//                            method.insertBefore("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + method.getLongName() + "\");");
-//                            method.insertAfter("com.shorindo.xprofiler.Profiler.profileOut(profile);");
-//                        } else {
-//                            method.insertAfter("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + method.getLongName() + "\");");
-//                            method.insertAfter("com.shorindo.xprofiler.Profiler.profileOut(profile);");
-//                        }
-//                        //method.insertAfter("} finally { com.shorindo.xprofiler.Profiler.profileOut(profile); }");
-//                    }
+                    // メソッドをrenameして新しいメソッドから呼び出す。
+                    // →アノテーションがうまくハンドリングできないので
+                    //   元のメソッドの中身を入れ替えてコピーしたのを呼び出すようにする。
+                    for (CtMethod origMethod : cc.getDeclaredMethods()) {
+                        String origName = origMethod.getName();
+                        String newName = "profiler_" + origName;
+                        CtMethod newMethod = CtNewMethod.copy(origMethod, newName, cc, null);
 
-//                    for (CtMethod method : cc.getDeclaredMethods()) {
-//                        if (cc != method.getDeclaringClass()) continue;
-//
-//                        method.instrument(new ExprEditor() {
-//                            @Override
-//                            public void edit(MethodCall m) throws CannotCompileException {
-//                                System.out.println(" --> " + m.getMethodName());
-//                            }
-//                        });
-//                    }
-
-                    // メソッドをrenameして新しいメソッドから呼び出す
-                    // →アノテーションがうまくハンドリングできない
-                    // https://www.ibm.com/developerworks/jp/java/library/j-dyn0916/
-                    for (CtMethod method : cc.getDeclaredMethods()) {
-                        if (cc != method.getDeclaringClass()) continue;
-
-                        System.out.println("  --> " + method.getName());
-
-                        String mname = method.getName();
-                        String nname = "_" + mname;
-                        CtMethod mnew = CtNewMethod.copy(method, nname, method.getDeclaringClass(), null);
-                        cc.addMethod(mnew);
+                        cc.addMethod(newMethod);
                         StringBuffer body = new StringBuffer();
                         body.append("{");
-                        body.append("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + method.getLongName() + "\");");
+                        body.append("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + origMethod.getLongName() + "\");");
                         body.append("try {");
-                        try {
-                            String type = method.getReturnType().getName();
-                            if (!"void".equals(type)) {
-                                body.append("return ");
-                            }
-                        } catch (NotFoundException e) {
-                            e.printStackTrace();
+                        if (!"void".equals(newMethod.getReturnType().getName())) {
+                            body.append("return ");
                         }
-                        body.append(nname + "($$);\n");
+                        body.append(newName + "($$);\n");
                         body.append("} finally {");
                         body.append("    com.shorindo.xprofiler.Profiler.profileOut(profile);");
                         body.append("}}");
-                        method.setBody(body.toString());
-
-                        // アノテーションを入れ替える
-//                        try {
-//                            List<Object> attrs = new ArrayList<>();
-//                            for (Object obj : method.getMethodInfo().getAttributes()) {
-//                                //System.out.println("  attr --> " + obj + ":" + obj.getClass());
-//                                if (obj instanceof AnnotationsAttribute) {
-////                                    for (Annotation annot : ((AnnotationsAttribute)obj).getAnnotations()) {
-////                                        System.out.println("  annot --> " + annot.getTypeName() + " to " + method.getName());
-////                                    }
-//                                    mnew.getMethodInfo().addAttribute((AnnotationsAttribute)obj);
-//                                } else {
-//                                    attrs.add(obj);
-//                                }
-//                            }
-//                            method.getMethodInfo().removeCodeAttribute();
-//                            for (Object cattr : method.getMethodInfo().getAttributes()) {
-//                                System.out.println("    " + cattr);
-//                            }
-//                            for (Object attr : attrs) {
-//                                method.getMethodInfo().addAttribute((AttributeInfo)attr);
-//                            }
-//                        } catch (Exception e) {
-//                            e.printStackTrace();
-//                        }
-
+                        origMethod.setBody(body.toString());
                     }
 
-                    // ExprEditorでは呼び出されるメソッド本体ではなく、呼び出し側の呼び出し方が変更される？
-//                    cc.instrument(new ExprEditor() {
-//                        @Override
-//                        public void edit(MethodCall m) throws CannotCompileException {
-//                            try {
-//                                System.err.println(cc.getName() + ":" + m.getMethodName() + "->" + m.getClassName());
-//                                if (cc != m.getMethod().getDeclaringClass()) return;
-//                                //if (!isTarget(m.getMethod().getDeclaringClass().getName())) return;
-//                                m.replace("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + m.getMethod().getLongName() + "\");"
-//                                        + "try {"
-//                                        + "    $_ = $proceed($$);"
-//                                        + "} finally {"
-//                                        + "    com.shorindo.xprofiler.Profiler.profileOut(profile);"
-//                                        + "}");
-//                            } catch (NotFoundException e) {
-//                                e.printStackTrace();
-//                            }
-//                        }
-//                    });
-                    System.out.println(toSource(cc));
                     return cc.toBytecode();
                 } catch (IOException | RuntimeException e) {
                     e.printStackTrace();
                 } catch (CannotCompileException e) {
+                    e.printStackTrace();
+                } catch (NotFoundException e) {
                     e.printStackTrace();
                 } finally {
                     try {
@@ -272,17 +153,28 @@ public class Profiler {
                 return null;
             }
             
+            private final String OWN_NAME = Profiler.class.getName();
             private boolean isTarget(String className) {
-                //System.err.println(className);
-                if (className.equals("com.shorindo.xprofiler.Profiler")) {
-                    return false;
-                } else if (className.startsWith("com.shorindo.")) {
-                    return true;
-                } else {
+                //System.err.println("isTarget(" + className + ")");
+                if (className.equals(OWN_NAME)) {
                     return false;
                 }
+
+                for (Pattern p : settings.getExcludes()) {
+                    if (p.matcher(className).matches()) {
+                        return false;
+                    }
+                }
+
+                for (Pattern p : settings.getIncludes()) {
+                    if (p.matcher(className).matches()) {
+                        return true;
+                    }
+                }
                 
+                return false;
             }
+
         });
         
         Runtime.getRuntime().addShutdownHook(new Thread() {
@@ -291,6 +183,19 @@ public class Profiler {
                 printTree();
             }
         });
+        
+        //setupMonitor();
+    }
+
+    private static void setupMonitor() {
+        try {
+            RequestMonitor monitor = new RequestMonitor();
+            String name = "com.shorindo.xprofiler:type=RequestMonitor";
+            MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+            mBeanServer.registerMBean(monitor, new ObjectName(name));
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     private static Map<Thread, Stack<Profile>> stackMap = new HashMap<>();

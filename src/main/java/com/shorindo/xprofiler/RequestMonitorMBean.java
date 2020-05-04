@@ -18,19 +18,6 @@ package com.shorindo.xprofiler;
 /**
  * 
  */
-public class Hello extends Greeting {
-    @Deprecated
-    public void say() {
-        System.out.println("Hello");
-        hi();
-    }
-    protected void hi() {
-        System.out.println("Hi, " + createWorld().getName());
-        bye();
-    }
-    public static void main(String[] args) {
-        System.out.println("start...");
-        new Hello().say();
-    }
-
- }
+public interface RequestMonitorMBean {
+    long getRequestCount(); // リクエスト数を取得する
+}
