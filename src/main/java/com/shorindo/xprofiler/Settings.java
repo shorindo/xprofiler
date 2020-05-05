@@ -23,6 +23,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.regex.Pattern;
 
@@ -35,6 +36,7 @@ import org.mozilla.javascript.ScriptableObject;
  * 
  */
 public class Settings {
+    private boolean printOnExit = false;
     private List<Pattern> includes = new ArrayList<>();
     private List<Pattern> excludes = new ArrayList<>();
 
@@ -45,13 +47,16 @@ public class Settings {
         try (InputStream is = new FileInputStream(fileName)) {
             Reader reader = new InputStreamReader(is, "UTF-8");
             ctx.evaluateReader(scope, reader, fileName, 1, null);
-            jsToJava(scope.get("settings"), settings);
+            settings = __jsToBean(scope.get("settings"), Settings.class);
         } catch (Exception e) {
             e.printStackTrace();
         }
         return settings;
     }
 
+    /*
+     * FIXME
+     */
     private static void jsToJava(Object jsObject, Object javaObject) {
         if (jsObject instanceof NativeObject) {
             NativeObject nativeObject = (NativeObject)jsObject;
@@ -60,7 +65,119 @@ public class Settings {
             }
         }
     }
+    
+    @SuppressWarnings("unchecked")
+    private static <T>T __jsToBean(Object jsObject, Class<T> clazz) {
+        //System.out.println("__jsToBean(" + jsObject.getClass() + ", " + clazz + ")");
+        if (jsObject instanceof Boolean) {
+            return (T)jsObject;
+        }
+        if (jsObject instanceof Integer) {
+            return (T)jsObject;
+        }
+        if (jsObject instanceof Double) {
+            return (T)jsObject;
+        }
+        if (jsObject instanceof String) {
+            return (T)jsObject;
+        }
+        if (jsObject instanceof NativeArray && clazz == List.class) {
+            Class<?> compType = clazz.getComponentType();
+            List<Object> list = new ArrayList<>();
+            for (Object item : (NativeArray)jsObject) {
+                list.add(__jsToBean(item, clazz.getComponentType()));
+            }
+            return (T)list;
+        }
+        if (jsObject instanceof NativeArray && clazz.isArray()) {
+            
+        }
+        if (jsObject instanceof NativeObject && clazz == Map.class) {
+            
+        }
+        if (jsObject instanceof NativeObject) {
+            try {
+                T bean = clazz.newInstance();
+                for (Entry<Object,Object> entry : ((NativeObject)jsObject).entrySet()) {
+                    String name = entry.getKey().toString();
+                    String setterName = "set" + name.substring(0, 1).toUpperCase() + name.substring(1);
+                    for (Method method : bean.getClass().getDeclaredMethods()) {
+                        if (setterName.equals(method.getName())
+                                && method.getParameterCount() == 1) {
+                            method.invoke(bean, __jsToBean(entry.getValue(), method.getParameters()[0].getType()));
+                            break;
+                        }
+                    }
+                }
+                return bean;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return null;
+    }
 
+    private static void _jsToBean(Object bean, String name, Object nativeObject) throws IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+        String setterName = "set" + name.substring(0, 1).toUpperCase() + name.substring(1);
+        if (nativeObject instanceof Boolean) {
+            for (Method method : bean.getClass().getDeclaredMethods()) {
+                if (setterName.equals(method.getName())
+                        && method.getParameterCount() == 1
+                        && method.getParameters()[0].getType() == Boolean.class) {
+                    method.invoke(bean, nativeObject);
+                    break;
+                }
+            }
+        } else if (nativeObject instanceof Integer) {
+            for (Method method : bean.getClass().getDeclaredMethods()) {
+                if (setterName.equals(method.getName())
+                        && method.getParameterCount() == 1
+                        && method.getParameters()[0].getType() == Integer.class) {
+                    method.invoke(bean, nativeObject);
+                    break;
+                }
+            }
+        } else if (nativeObject instanceof Double) {
+            for (Method method : bean.getClass().getDeclaredMethods()) {
+                if (setterName.equals(method.getName())
+                        && method.getParameterCount() == 1
+                        && method.getParameters()[0].getType() == Double.class) {
+                    method.invoke(bean, nativeObject);
+                    break;
+                }
+            }
+        } else if (nativeObject instanceof String) {
+            for (Method method : bean.getClass().getDeclaredMethods()) {
+                if (setterName.equals(method.getName())
+                        && method.getParameterCount() == 1
+                        && method.getParameters()[0].getType() == String.class) {
+                    method.invoke(bean, nativeObject);
+                    break;
+                }
+            }
+        } else if (nativeObject instanceof NativeArray) {
+            for (Method method : bean.getClass().getDeclaredMethods()) {
+                if (setterName.equals(method.getName())
+                        && method.getParameterCount() == 1) {
+                    Class<?> type = method.getParameters()[0].getType();
+                    if (List.class.isAssignableFrom(type)) {
+                        List<?> param = new ArrayList<>();
+                        for (Object item : (NativeArray)nativeObject) {
+
+                        }
+                        method.invoke(bean, param);
+                    } else if (type.isArray()) {
+                        type.getComponentType();
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
+    /*
+     * FIXME
+     */
     private static void jsToBean(Object bean, String name, Object nativeObject) {
         String getterName = "get" + name.substring(0, 1).toUpperCase() + name.substring(1);
         String setterName = "set" + name.substring(0, 1).toUpperCase() + name.substring(1);
@@ -88,17 +205,28 @@ public class Settings {
         }
     }
 
+    public boolean isPrintOnExit() {
+        return printOnExit;
+    }
+
+    public void setPrintOnExit(boolean printOnExit) {
+        this.printOnExit = printOnExit;
+    }
+
     public List<Pattern> getIncludes() {
         return includes;
     }
+
     public void setIncludes(List<String> includes) {
         for (String include : includes) {
             this.includes.add(compile(include));
         }
     }
+
     public List<Pattern> getExcludes() {
         return excludes;
     }
+
     public void setExcludes(List<String> excludes) {
         for (String exclude : excludes) {
             this.excludes.add(compile(exclude));
@@ -114,6 +242,7 @@ public class Settings {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
+        sb.append("printOnExit = " + printOnExit + "\n");
         sb.append("includes = [\n");
         for (Pattern p : includes) {
             sb.append("    " + p.pattern() + "\n");
