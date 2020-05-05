@@ -1,4 +1,7 @@
 settings = {
+    printOnExit : true,
+    format : "text",
+    //output : "C:/TEMP/xprofiler.html",
     includes : [
         "com.shorindo.*"
     ],

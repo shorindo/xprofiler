@@ -18,28 +18,38 @@ package com.shorindo.xprofiler;
 import java.security.ProtectionDomain;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Stack;
+import java.util.TreeMap;
 import java.util.regex.Pattern;
 import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.PrintStream;
 import java.io.Reader;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.IllegalClassFormatException;
 import java.lang.instrument.Instrumentation;
 import java.lang.management.ManagementFactory;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 
 import javassist.CannotCompileException;
 import javassist.ClassClassPath;
 import javassist.ClassPath;
 import javassist.ClassPool;
 import javassist.CtClass;
+import javassist.CtConstructor;
 import javassist.CtMethod;
+import javassist.CtNewConstructor;
 import javassist.CtNewMethod;
 import javassist.LoaderClassPath;
 import javassist.NotFoundException;
@@ -65,7 +75,6 @@ import org.mozilla.javascript.ScriptableObject;
  * 
  */
 public class Profiler {
-    private static Config config;
     private static LoaderClassPath classPath;
     private static Settings settings = new Settings();
 
@@ -103,7 +112,7 @@ public class Profiler {
 
                 InputStream is = new ByteArrayInputStream(classfileBuffer);
                 try {
-                    // Tomcatのコンテキスクラスパスを追加する
+                    // Tomcatなど複数のクラスローダを使う場合のコンテキスクラスパスを追加する
                     if (classPath == null) {
                         classPath = new LoaderClassPath(Thread.currentThread().getContextClassLoader());
                         clPool.appendClassPath(classPath);
@@ -118,13 +127,13 @@ public class Profiler {
                     //   元のメソッドの中身を入れ替えてコピーしたのを呼び出すようにする。
                     for (CtMethod origMethod : cc.getDeclaredMethods()) {
                         String origName = origMethod.getName();
-                        String newName = "profiler_" + origName;
+                        String newName = "_xprofiler_" + origName;
                         CtMethod newMethod = CtNewMethod.copy(origMethod, newName, cc, null);
 
                         cc.addMethod(newMethod);
                         StringBuffer body = new StringBuffer();
                         body.append("{");
-                        body.append("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + origMethod.getLongName() + "\");");
+                        body.append("com.shorindo.xprofiler.Profiler.Profile profile = com.shorindo.xprofiler.Profiler.profileIn(\"" + origMethod.getLongName() + "\", $args);");
                         body.append("try {");
                         if (!"void".equals(newMethod.getReturnType().getName())) {
                             body.append("return ");
@@ -176,15 +185,23 @@ public class Profiler {
             }
 
         });
-        
-        Runtime.getRuntime().addShutdownHook(new Thread() {
-            @Override
-            public void run() {
-                printTree();
-            }
-        });
-        
-        //setupMonitor();
+
+        if (settings.isPrintOnExit()) {
+            Runtime.getRuntime().addShutdownHook(new Thread() {
+                @Override
+                public void run() {
+                    try {
+                        if ("text".equals(settings.getFormat())) {
+                            printText();
+                        } else if ("html".equals(settings.getFormat())) {
+                            printHtml();
+                        }
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+        }
     }
 
     private static void setupMonitor() {
@@ -199,9 +216,30 @@ public class Profiler {
     }
 
     private static Map<Thread, Stack<Profile>> stackMap = new HashMap<>();
-    private static Map<Thread, List<Profile>> profileMap = new HashMap<>();
+    private static Map<Thread, List<Profile>> profileMap = new LinkedHashMap<>();
 
-    public static Profile profileIn(String name) {
+    public static Profile profileIn(String name, Object[] args) {
+        //System.err.println(name);
+        /*
+         * メソッドの引数を文字列化して入れ替える。
+         * ただし、Proxyの継承クラスのインスタンスは無限の再帰呼び出しが起こるので[proxy]と表現する。
+         */
+        if (args.length > 0) {
+            StringBuilder sb = new StringBuilder();
+            String sep = "";
+            for (int i = 0; i < args.length; i++) {
+                if (args[i] == null) {
+                    sb.append(sep + "null");
+                } else if (Proxy.class.isAssignableFrom(args[i].getClass())) {
+                    sb.append(sep + "[proxy]");
+                } else {
+                    sb.append(sep + args[i].toString());
+                }
+                sep = ",";
+            }
+            String arg = sb.toString().length() > 8 ? sb.toString().substring(0, 8) + ".." : sb.toString();
+            name = name.replaceAll("\\(.*\\)", "(" + arg.replaceAll("\\$", "\\\\\\$") + ")");
+        }
         Stack<Profile> stack = stackMap.get(Thread.currentThread());
         if (stack == null) {
             stack = new Stack<Profile>();
@@ -216,10 +254,9 @@ public class Profiler {
             profileMap.put(Thread.currentThread(), profileList);
         }
         profileList.add(profile);
-        //System.out.println("in:" + name);
         return profile;
     }
-    
+
     public static void profileOut(Profile profile) {
         //System.out.println("out:" + profile.getName());
         Stack<Profile> stack = stackMap.get(Thread.currentThread());
@@ -229,13 +266,47 @@ public class Profiler {
         }
     }
 
-    public static void printTree() {
+    public static void printText() throws FileNotFoundException {
+        PrintStream ps = System.out;
+        if (settings.getOutput() != null) {
+            ps = new PrintStream(new FileOutputStream(settings.getOutput()));
+        }
         for (Entry<Thread,List<Profile>> entry : profileMap.entrySet()) {
-            System.out.println("[" + entry.getKey().getName() + "]");
+            ps.println("[" + entry.getKey().getName() + "]");
             for (Profile p : entry.getValue()) {
-                System.out.println(indent(p.getLevel()) + p.getName() + ":" + ((double)p.getNanoTime() / 1000000.0) + " msec");
+                ps.println(indent(p.getLevel()) + p.getName() + ":" + ((double)p.getNanoTime() / 1000000.0) + " msec");
             }
         }
+    }
+    
+    public static void printHtml() throws FileNotFoundException {
+        PrintStream ps = System.out;
+        if (settings.getOutput() != null) {
+            ps = new PrintStream(new FileOutputStream(settings.getOutput()));
+        }
+        ps.println("<!doctype html>");
+        ps.println("<html><head>");
+        ps.println("<style type=\"text/css\">");
+        ps.println("</style>");
+        ps.println("</head><body>");
+        ps.println("<div class=\"thread-list\">");
+        for (Thread thread : profileMap.keySet()) {
+            ps.println("<div class=\"thread-name\">[" + thread.getName() + "]</div>");
+        }
+        ps.println("</div>");
+        ps.println("<div class=\"tree\">");
+        for (Entry<Thread,List<Profile>> entry : profileMap.entrySet()) {
+            //ps.println("[" + entry.getKey().getName() + "]");
+            ps.println("<div>");
+            for (Profile p : entry.getValue()) {
+                int indent = p.getLevel() * 20;
+                ps.println("<div style=\"white-space:nowrap;padding-left:" + indent + "px;\">" + p.getName() + ":" + ((double)p.getNanoTime() / 1000000.0) + " msec</div>");
+            }
+            ps.println("</div>");
+        }
+        ps.println("</div>");
+        ps.println("</body>");
+        ps.println("</html>");
     }
 
     private static String indent(int level) {
@@ -270,36 +341,6 @@ public class Profiler {
         }
         public String toString() {
             return name + ":" + nanoTime;
-        }
-    }
-
-    @XmlRootElement(name = "config")
-    public static class Config {
-        private String start;
-        private List<String> includes;
-        
-        @XmlElement(name = "start")
-        public String getStart() {
-            return start;
-        }
-        public void setStart(String start) {
-            this.start = start;
-        }
-        @XmlElementWrapper(name="includes")
-        @XmlElement(name="package")
-        public List<String> getIncludes() {
-            return includes;
-        }
-        public void setIncludes(List<String> includes) {
-            this.includes = includes;
-        }
-        public boolean contains(String name) {
-            for (String include : includes) {
-                if (name.startsWith(include.replaceAll("\\.", "/"))) {
-                    return true;
-                }
-            }
-            return false;
         }
     }
 
