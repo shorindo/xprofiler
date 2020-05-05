@@ -233,12 +233,13 @@ public class Profiler {
                 } else if (Proxy.class.isAssignableFrom(args[i].getClass())) {
                     sb.append(sep + "[proxy]");
                 } else {
-                    sb.append(sep + args[i].toString());
+                    String arg = args[i].toString();
+                    arg = arg.length() > 8 ? arg.substring(0, 8) + ".." : arg.toString();
+                    sb.append(sep + arg);
                 }
-                sep = ",";
+                sep = ", ";
             }
-            String arg = sb.toString().length() > 8 ? sb.toString().substring(0, 8) + ".." : sb.toString();
-            name = name.replaceAll("\\(.*\\)", "(" + arg.replaceAll("\\$", "\\\\\\$") + ")");
+            name = name.replaceAll("\\(.*\\)", "(" + sb.toString().replaceAll("\\$", "\\\\\\$") + ")");
         }
         Stack<Profile> stack = stackMap.get(Thread.currentThread());
         if (stack == null) {
