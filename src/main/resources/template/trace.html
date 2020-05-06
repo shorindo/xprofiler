@@ -1,0 +1,115 @@
+<!doctype html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>trace</title>
+    <style type="text/css">
+    html {
+      height:100%;
+    }
+    body {
+      padding:0px;
+      margin:0px;
+      height:100%;
+    }
+    div#navigator {
+      float:left;
+      width:200px;
+      white-space:nowrap;
+      border-right:1px solid gray;
+      min-height:100%;
+      overflow-y:auto;
+    }
+    div#navigator .title {
+      background-color:lightgray;
+    }
+    div#navigator a {
+      padding-left:5px;
+      display:block;
+    }
+    #content {
+      font-family: monospace;
+      margin-left:180px;
+      padding:5px;
+    }
+    .trace {
+      margin-left:20px;
+      line-height:100%;
+      white-space:nowrap;
+    }
+    .trace.open > a,
+    .trace.close > a {
+      text-decoration: none;
+      vertical-align:middle;
+      cursor: pointer;
+    }
+    .trace.open > a.icon:before {
+      content: "+ ";
+    }
+    .trace.close > a.icon:before {
+      content: "- ";
+    }
+    .trace.open > div.trace {
+      display: none;
+    }
+    .trace.close > div.trace {
+      display: default;
+    }
+    </style>
+    <script type="text/javascript">
+    function toggle(evt) {
+        var target = evt.target.parentNode;
+        if (hasClass(target, 'open')) {
+            removeClass(target, 'open');
+            addClass(target, 'close');
+        } else {
+            removeClass(target, 'close');
+            addClass(target, 'open');
+        }
+    }
+    function showSource(evt) {
+        var p = evt.target.title.split(/:/);
+        window.open("sources/" + p[0] + ".html#line-" + p[1], "source");
+    }
+    function hasClass(node, name) {
+        if (!node.className) {
+            return false;
+        } else {
+            return (' ' + node.className + ' ').includes(' ' + name + ' ');
+        }
+    }
+    function removeClass(node, name) {
+        if (hasClass(node, name)) {
+            var parts = node.className.trim().split(/ +/);
+            parts.splice(parts.indexOf(name), 1);
+            node.className = parts.join(' ');
+        }
+    }
+    function addClass(node, name) {
+        if (!hasClass(node, name)) {
+            node.className = node.className ?
+                    node.className + ' ' + name :
+                    name;
+        }
+    }
+    function showThread(name) {
+        var dom = document.getElementById("content");
+        for (var i = 0; i < dom.childNodes.length; i++) {
+            var child = dom.childNodes.item(i);
+            console.log(child);
+            if (child.nodeName != "DIV") {
+                continue;
+            } else if (child.id == name) {
+                child.style.display = "block";
+                console.log(child);
+            } else {
+                child.style.display = "none";
+            }
+        }
+    }
+    </script>
+  </head>
+  <body>
+    {{content}}
+  </body>
+</html>

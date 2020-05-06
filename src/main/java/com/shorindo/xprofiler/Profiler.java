@@ -246,15 +246,20 @@ public class Profiler {
             stack = new Stack<Profile>();
             stackMap.put(Thread.currentThread(), stack);
         }
-        Profile profile = new Profile(name, stack.size());
-        stack.push(profile);
-
         List<Profile> profileList = profileMap.get(Thread.currentThread());
         if (profileList == null) {
             profileList = new ArrayList<Profile>();
             profileMap.put(Thread.currentThread(), profileList);
         }
-        profileList.add(profile);
+
+        Profile profile = new Profile(name, stack.size());
+        if (stack.size() == 0) {
+            profileList.add(profile);
+        } else {
+            Profile parent = stack.peek();
+            parent.addChild(profile);
+        }
+        stack.push(profile);
         return profile;
     }
 
@@ -275,39 +280,63 @@ public class Profiler {
         for (Entry<Thread,List<Profile>> entry : profileMap.entrySet()) {
             ps.println("[" + entry.getKey().getName() + "]");
             for (Profile p : entry.getValue()) {
-                ps.println(indent(p.getLevel()) + p.getName() + ":" + ((double)p.getNanoTime() / 1000000.0) + " msec");
+                _printText(ps, p);
             }
         }
     }
+
+    private static void _printText(PrintStream ps, Profile profile) {
+        ps.println(indent(profile.getLevel()) + profile.getName() + ":" + ((double)profile.getNanoTime() / 1000000.0) + " msec");
+        for (Profile child : profile.getChildList()) {
+            _printText(ps, child);
+        }
+    }
     
-    public static void printHtml() throws FileNotFoundException {
+
+    public static void printHtml() throws Exception {
         PrintStream ps = System.out;
         if (settings.getOutput() != null) {
             ps = new PrintStream(new FileOutputStream(settings.getOutput()));
         }
-        ps.println("<!doctype html>");
-        ps.println("<html><head>");
-        ps.println("<style type=\"text/css\">");
-        ps.println("</style>");
-        ps.println("</head><body>");
-        ps.println("<div class=\"thread-list\">");
+        InputStream is = Profiler.class.getClassLoader().getResourceAsStream("template/trace.html");
+        Reader reader = new InputStreamReader(is, "UTF-8");
+        char[] buff = new char[2048];
+        int len = 0;
+        StringBuilder tempBuilder = new StringBuilder();
+        while ((len = reader.read(buff)) > 0) {
+            tempBuilder.append(buff, 0, len);
+        }
+        is.close();
+        String template = tempBuilder.toString();
+        StringBuilder sb = new StringBuilder();
+        sb.append("<div id=\"navigator\">");
+        sb.append("<div class=\"title\">Thread</div>");
         for (Thread thread : profileMap.keySet()) {
-            ps.println("<div class=\"thread-name\">[" + thread.getName() + "]</div>");
+            sb.append("<a href=\"javascript:showThread('" + thread.getName() + "')\">[" + thread.getName() + "]</a>");
         }
-        ps.println("</div>");
-        ps.println("<div class=\"tree\">");
+        sb.append("</div>");
+        sb.append("<div id=\"content\">");
         for (Entry<Thread,List<Profile>> entry : profileMap.entrySet()) {
-            //ps.println("[" + entry.getKey().getName() + "]");
-            ps.println("<div>");
+            sb.append("<div id=\"" + entry.getKey().getName() + "\" class=\"thread\" style=\"display:none;\">");
             for (Profile p : entry.getValue()) {
-                int indent = p.getLevel() * 20;
-                ps.println("<div style=\"white-space:nowrap;padding-left:" + indent + "px;\">" + p.getName() + ":" + ((double)p.getNanoTime() / 1000000.0) + " msec</div>");
+                sb.append(_printHtml(p));
             }
-            ps.println("</div>");
+            sb.append("</div>");
         }
-        ps.println("</div>");
-        ps.println("</body>");
-        ps.println("</html>");
+        sb.append("</div>");
+        sb.append("</body>");
+        sb.append("</html>");
+        ps.print(template.replace("{{content}}", sb.toString()));
+    }
+    
+    private static String _printHtml(Profile profile) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("<div class=\"trace close\"><a class=\"icon\" onclick=\"toggle(event);\"></a>" + profile.getName() + ":" + ((double)profile.getNanoTime() / 1000000.0) + " msec");
+        for (Profile child : profile.getChildList()) {
+            sb.append(_printHtml(child));
+        }
+        sb.append("</div>");
+        return sb.toString();
     }
 
     private static String indent(int level) {
@@ -316,33 +345,6 @@ public class Profiler {
             sb.append("  ");
         }
         return sb.toString();
-    }
-
-    public static class Profile {
-        private String name;
-        private int level;
-        private long nanoTime;
-
-        public Profile(String name, int level) {
-            this.name = name;
-            this.level = level;
-            this.nanoTime = System.nanoTime();
-        }
-        public String getName() {
-            return name;
-        }
-        public int getLevel() {
-            return level;
-        }
-        public long getNanoTime() {
-            return nanoTime;
-        }
-        public void setNanoTime(long nanoTime) {
-            this.nanoTime = nanoTime;
-        }
-        public String toString() {
-            return name + ":" + nanoTime;
-        }
     }
 
     public static String toSource(CtClass cc) {
@@ -363,5 +365,47 @@ public class Profiler {
             e.printStackTrace();
         }
         return sb.toString();
+    }
+
+    public static class Profile {
+        private String name;
+        private int level;
+        private long nanoTime;
+        private List<Profile> childList;
+
+        public Profile(String name, int level) {
+            this.name = name;
+            this.level = level;
+            this.nanoTime = System.nanoTime();
+            this.childList = new ArrayList<>();
+        }
+
+        public String getName() {
+            return name;
+        }
+
+        public int getLevel() {
+            return level;
+        }
+
+        public long getNanoTime() {
+            return nanoTime;
+        }
+
+        public void setNanoTime(long nanoTime) {
+            this.nanoTime = nanoTime;
+        }
+
+        public void addChild(Profile child) {
+            this.childList.add(child);
+        }
+
+        public List<Profile> getChildList() {
+            return this.childList;
+        }
+
+        public String toString() {
+            return name + ":" + nanoTime;
+        }
     }
 }
